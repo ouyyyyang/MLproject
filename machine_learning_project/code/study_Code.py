@@ -16,8 +16,10 @@ file_path = '/machine_learning_project/data/loan_data.csv'
 loan_data = pd.read_csv(file_path)
 # 加载并检查数据
 loan_data.info(),loan_data.head()
-# 统计其中的数据类型和缺失值
-print(loan_data.describe(include='object'), loan_data.isnull().sum())
+# 显示数据的基本属性
+print(loan_data.describe(include='object'))
+# 统计缺失值
+print(loan_data.isnull().sum())
 # 处理缺失值，为保留特征内部统计特性，使用均值或中位数等填充
 loan_data['loan_percent_income'] = loan_data['loan_percent_income'].fillna(loan_data['loan_percent_income'].mean())
 loan_data['credit_score'] = loan_data['credit_score'].fillna(loan_data['credit_score'].median())
