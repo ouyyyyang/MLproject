@@ -12,7 +12,7 @@ from catboost import CatBoostClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import RandomizedSearchCV
 # 导入数据
-file_path = '/machine_learning_project/data/loan_data.csv'
+file_path = '../data/loan_data.csv'
 loan_data = pd.read_csv(file_path)
 # 加载并检查数据
 loan_data.info(),loan_data.head()
@@ -411,7 +411,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 # 将训练集和测试集存入excel表格中保存
 train_data = pd.concat([X_train, y_train], axis=1)
 test_data = pd.concat([X_test, y_test], axis=1)
-with pd.ExcelWriter('/机器学习大作业/data/train_test_data.xlsx') as writer:
+with pd.ExcelWriter('../data/train_test_data.xlsx') as writer:
     train_data.to_excel(writer, sheet_name='Train Data', index=False)
     test_data.to_excel(writer, sheet_name='Test Data', index=False)
 
