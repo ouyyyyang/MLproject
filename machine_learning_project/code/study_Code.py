@@ -1,6 +1,8 @@
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy.stats import pointbiserialr, chi2_contingency
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix,accuracy_score, classification_report
@@ -342,6 +344,74 @@ plt.show()
 
 # 在loan amount中，被拒贷款里数额低的贷款占比更大，而中高数额贷款更容易被同意
 # 在loan Interest Rate中，被拒贷款的利率大多较低，而中高利率的贷款更容易被同意
+
+#各列的特征与目标之间的相关性
+target_col = 'loan_status'
+numeric_cols = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt',
+    'loan_int_rate', 'loan_percent_income', 'cb_person_cred_hist_length','credit_score']
+# 计算点双列相关系数，分析连续变量与目标二分类变量之间的相关性，逐列计算然后将结果放置到集合中，绘制到同一张图上
+correlation_results = {}
+for col in numeric_cols:
+    correlation, p_value = pointbiserialr(loan_data[col], loan_data[target_col])
+    correlation_results[col] = {
+        '相关性': correlation,
+        'P-值': p_value
+    }
+correlation_df = pd.DataFrame(correlation_results).T
+print(correlation_df)
+# 定义计算 Cramér's V 的函数
+def cramers_v(chi2, n, k, r):
+    return np.sqrt(chi2 / (n * min(k - 1, r - 1)))
+# 分类变量，分析非连续量与目标变量之间的相关性，逐列计算然后将结果放置到集合中，绘制到同一张图上
+categorical_cols = [
+    'person_gender', 'previous_loan_defaults_on_file', 'person_education',
+    'person_home_ownership', 'loan_intent']
+chi_square_results = {}
+
+for col in categorical_cols:
+    # 创建列联表
+    contingency_table = pd.crosstab(loan_data[col], loan_data[target_col])
+    # 卡方检验
+    chi2, p, dof, expected = chi2_contingency(contingency_table)
+    # 计算样本总数
+    n = contingency_table.sum().sum()
+    # Cramér's V 来衡量相关性的强弱
+    k = contingency_table.shape[1]  # 目标变量类别数
+    r = contingency_table.shape[0]  # 当前变量类别数
+    cramers_v_value = cramers_v(chi2, n, k, r)
+    # 存储结果
+    chi_square_results[col] = {
+        'Chi-Square': chi2,
+        'P-值': p,
+        'Cramer\'s V': cramers_v_value
+    }
+chi_square_df = pd.DataFrame(chi_square_results).T
+print(chi_square_df)
+
+# 点双列相关系数绘图
+def plot_point_biserial(correlation_df):
+    correlation_df = correlation_df.sort_values(by='相关性', ascending=False)
+    plt.figure(figsize=(10, 6))
+    plt.barh(correlation_df.index, correlation_df['相关性'], color='skyblue', edgecolor='black')
+    plt.xlabel('点双列相关系数 (Point Biserial Correlation)', fontsize=12)
+    plt.ylabel('连续变量', fontsize=12)
+    plt.title('连续变量与目标变量的相关性', fontsize=14)
+    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    plt.show()
+
+# 卡方检验 (Cramér's V) 绘图
+def plot_cramers_v(chi_square_df):
+    chi_square_df = chi_square_df.sort_values(by='Cramer\'s V', ascending=False)
+    plt.figure(figsize=(10, 6))
+    plt.barh(chi_square_df.index, chi_square_df['Cramer\'s V'], color='lightgreen', edgecolor='black')
+    plt.xlabel('Cramer\'s V', fontsize=12)
+    plt.ylabel('分类变量', fontsize=12)
+    plt.title('分类变量与目标变量的相关性 (Cramer\'s V)', fontsize=14)
+    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    plt.show()
+plot_point_biserial(correlation_df)
+plot_cramers_v(chi_square_df)
+
 
 # 2.5.1 绘制 Pairs Plot，展示数字列的状态
 #################################################################################################################
