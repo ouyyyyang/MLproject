@@ -488,8 +488,13 @@ with pd.ExcelWriter('../data/train_test_data.xlsx') as writer:
 # 4：应用机器学习构建模型，并在测试上评估最佳模型
 # 使用StandardScaler来对训练集和测试集的数据进行标准化:将每个特征缩放到均值为0,标准差为1的分布上
 scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+X_train_standard = scaler.fit_transform(X_train)
+X_test_standard = scaler.transform(X_test)
+
+minmax_scaler = MinMaxScaler()
+X_train_scaled = minmax_scaler.fit_transform(X_train_standard)
+X_test_scaled = minmax_scaler.transform(X_test_standard)
+
 
 # 构建模型
 # 选用逻辑回归模型、极端梯度提升模型(XGBoost)、基于梯度提升决策树(CatBoost)、轻量级梯度提升机(LightGBM)、随机森林(Random Forest)
@@ -506,57 +511,59 @@ models = {
 
 for name, model in models.items():
     model.fit(X_train_scaled, y_train)  # 采用fit方法训练模型，喂数据
-    y_pred = model.predict(X_test_scaled)   # 使用训练好的模型对测试集X_test_scaled进行预测，得到预测结果
-    accuracy = accuracy_score(y_test, y_pred)
-# 计算并生成分类报告，包含模型的precision（精确率）、recall（召回率）、f1-score等指标
-    classification_rep = classification_report(y_test, y_pred)
-# 计算并生成混淆矩阵，展示模型在每个类别的预测结果。混淆矩阵用于辅助了解哪些类别被错误分类，哪些类别的预测效果较好
-# 返回一个矩阵，行表示实际类别，列表示预测类别
-    conf_matrix = confusion_matrix(y_test, y_pred)
-    print(f"模型: {name}")
-    print(f"准确率: {accuracy}")
-    print(f"分类报告:\n{classification_rep}")
-    print(f"混淆矩阵:\n{conf_matrix}\n")
-    print("-" * 80)
 
-# 在上面的六个模型中，逻辑回归和支持向量机的效果稍差，所以不选用这两个模型来调优，而对剩下的四个模型进行调优
-# 划分模型的超参数搜索空间
+
 param_grids = {
+    'Logistic Regression': {
+        'C': [0.01, 0.1, 1, 10,100],
+        'tol': [1e-1,1e-2,1e-3, 1e-4],
+        'solver': ['lbfgs', 'saga','liblinear'],
+        'max_iter': [200, 500, 1000,3000]
+    },
     'RandomForest': {
-        'n_estimators': [100, 200, 300],  # 控制森林中树的数量
-        'max_depth': [None, 10, 20],    # 限制树的最大深度
-        'min_samples_split': [2, 5, 10],    # 设置一个节点所能划分的最小样本数
-        'min_samples_leaf': [1, 2, 4]   # 每个叶子节点的最小样本数，增加值有助于防止过拟合
+        'n_estimators': [100, 200, 300],
+        'max_depth': [None, 10, 20],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4]
     },
     'LightGBM': {
-        'num_leaves': [20, 30, 40],    # 树的最大叶子数，更多叶子可以提高模型复杂度，但可能导致过拟合
-        'max_depth': [4, 6, 8],  # 限制树的最大深度
-        'learning_rate': [0.01, 0.05, 0.1],  # 设置学习率，学习率越小，需要的树更多，以获得更好的性能
-        'n_estimators': [100, 200, 300],  # 控制森林中树的数量
-        'feature_fraction': [0.6, 0.8, 1.0],  # 每棵树随机选择的特征比例。较小的比例可以防止过拟合
-        'bagging_fraction': [0.6, 0.8, 1.0]  # ：每棵树使用的样本比例，通常与feature_fraction配合使用来提高模型鲁棒性
+        'num_leaves': [20, 30, 40],
+        'max_depth': [4, 6, 8],
+        'learning_rate': [0.01, 0.05, 0.1],
+        'n_estimators': [100, 200, 300],
+        'feature_fraction': [0.6, 0.8, 1.0],
+        'bagging_fraction': [0.6, 0.8, 1.0]
     },
     'CatBoost': {
-        'iterations': [100, 200, 300],  # 迭代次数，限制训练过程中树的数量
-        'depth': [4, 6, 8],  # # 限制树的深度
-        'learning_rate': [0.01, 0.05, 0.1],  # 设置学习率，学习率越小，需要的树更多，以获得更好的性能
-        'l2_leaf_reg': [1, 3, 5]    # L2正则化系数，控制过拟合。较大的值可以减少过拟合，但可能导致欠拟合
+        'iterations': [100, 200, 300],
+        'depth': [4, 6, 8],
+        'learning_rate': [0.01, 0.05, 0.1],
+        'l2_leaf_reg': [1, 3, 5]
     },
     'XGBoost': {
-        'n_estimators': [100, 200, 300],    # 控制森林中树的数量
-        'max_depth': [4, 6, 8],  # 限制树的最大深度
-        'learning_rate': [0.01, 0.05, 0.1],  # 设置学习率，学习率越小，需要的树更多，以获得更好的性能
-        'colsample_bytree': [0.6, 0.8, 1.0],  # 每棵树使用的特征比例。这个参数控制了每棵树在训练时可以随机选择多少特征
-        'subsample': [0.6, 0.8, 1.0]    # 每棵树训练时的样本比例。较小的值有助于避免过拟合
+        'n_estimators': [100, 200, 300],
+        'max_depth': [4, 6, 8],
+        'learning_rate': [0.01, 0.05, 0.1],
+        'colsample_bytree': [0.6, 0.8, 1.0],
+        'subsample': [0.6, 0.8, 1.0]
+    },
+    'Classification SVM': {
+        'C': [0.01, 0.1, 1, 10, 100],
+        'gamma': ['scale', 'auto', 0.01, 0.1, 0.5],
+        'kernel': ['rbf', 'linear', 'poly'],
+        'degree': [3, 4, 5],
+        'tol': [1e-1,1e-2,1e-3],
+        'max_iter': [5000,10000]
     }
 }
 
 tune_models = {
+    'Logistic Regression': LogisticRegression(solver='lbfgs', penalty='l2', max_iter=1000, random_state=42),
     'RandomForest': RandomForestClassifier(random_state=42),
     'LightGBM': LGBMClassifier(random_state=42, verbose=-1),
     'CatBoost': CatBoostClassifier(verbose=False, random_state=42),
     'XGBoost': XGBClassifier(eval_metric='logloss', random_state=42),
-    # eval_metric:用于设置训练过程中评估模型性能的标准,logloss 常用于二分类问题，表示对数损失，越小越好
+    'Classification SVM': SVC(random_state=42)
 }
 
 best_models = {}
@@ -564,12 +571,28 @@ for model_name in tune_models.keys():
     print(f"对 {model_name} 调优")
     # tune_models：需要调优的模型 param_grids：模型对应的超参数搜索空间 n_iter：随机搜索的迭代次数 scoring：以准确率作为模型性能的评估指标
     # cv: 交叉验证的折数,进行5折交叉验证 random_state：设置随机数生成器的种子 n_jobs：表示使用所有可用的CPU核心来并行化计算，减少运行时间
-    random_search = RandomizedSearchCV(tune_models[model_name], param_grids[model_name], n_iter=10, scoring='accuracy', cv=5, random_state=42, n_jobs=-1)
+    random_search = RandomizedSearchCV(tune_models[model_name], param_grids[model_name], n_iter=10, scoring='f1', cv=5, random_state=42, n_jobs=-1)
     random_search.fit(X_train_scaled, y_train)
     best_models[model_name] = random_search.best_estimator_  # 选择交叉验证评估后，表现最好的模型存入
     print(f"最优化参数: {random_search.best_params_}")
-    print(f"最佳分数: {random_search.best_score_}")
+    print(f"最佳f1分数: {random_search.best_score_}")
+
+    # 使用最佳模型在测试集上进行预测
+    y_pred = random_search.best_estimator_.predict(X_test_scaled)  # 使用训练好的模型对测试集X_test_scaled进行预测
+
+    # 计算并打印测试集上的准确率
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"{model_name} 测试集准确率: {accuracy}")
+
+    # 计算并生成分类报告，包含模型的precision（精确率）、recall（召回率）、f1-score等指标
+    classification_rep = classification_report(y_test, y_pred)
+    print(f"{model_name} 分类报告:\n{classification_rep}")
+
+    # 计算并生成混淆矩阵，展示模型在每个类别的预测结果
+    conf_matrix = confusion_matrix(y_test, y_pred)
+    print(f"{model_name} 混淆矩阵:\n{conf_matrix}")
+
     print("-" * 80)
 
-# 得出结论：以上四个模型的表现都非常良好，都获得了很高的准确率，其中XBoost的模型表现最好，拥有93.47%的最高准确率
+# 得出结论：以上六个模型的表现都非常良好，都获得了很高的准确率，其中XBoost的模型表现最好，拥有0.845的f1分数，测试集测试拥有93.47%的最高准确率
 
