@@ -3,9 +3,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import pointbiserialr, chi2_contingency
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix,accuracy_score, classification_report
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report, f1_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
@@ -200,17 +200,29 @@ plt.tight_layout(rect=[0, 0.03, 1, 0.99])
 plt.show()
 
 # Person Gender:贷款批准和拒绝在性别之间相当平衡，表明性别可能不是贷款审批结果的重要决定因素
+
 # Person Education：与教育水平较低的申请人相比，受教育程度较高的申请人的贷款批准次数更高
+# 男性和女性申请人在不同教育阶段的贷款批准率和拒绝率方面表现基本相同，小部分略有不同
+# 只有高中教育的申请人被拒绝的次数似乎多于批准次数，这表明教育水平可能会影响贷款结果
+# 受过更多教育的申请人（例如，拥有硕士和学士学位的申请人）更有可能获得批准，这表明教育水平是贷款批准的积极指标，可能反映了更稳定的财务状况
+# 受教育程度较低的申请人的拒绝率更高，这可能表明贷方认为风险更高，这些模式表明，教育水平是贷款审批决策的一个影响因素，并且在性别间的交互作用相似
+
 # Person Home Ownership:与有抵押贷款或拥有房屋的人相比，租房的人似乎有更高的贷款拒绝率，表明房屋所有权状况被认为是一个风险因素，因为租房者的财务稳定性可能不如房主
+# 两种性别的趋势基本相同，但租房基数更高，贷款成功率更高，可能是因为年轻人购买需求大(住房、车)等，还款潜力大
+
 # Loan Intent：某些贷款目的，如债务合并和个人贷款，贷款拒绝比批准多；企业和教育的贷款似乎具有相对平衡的批准率和拒绝率，可能是被认为具有创收的潜力
+# 具图分析，债务合并(debtconsol dation)和医疗意向的同意率更高，相比之下，用于教育、投资和个人贷款的同意率更低
+
 # Previous Loan Defaults on File：与没有违约史的申请人相比，有过贷款违约历史的申请人的拒绝率要高得多，几乎为100%，此特征可能对贷款状况有很大影响
+# 以前有过贷款违约史的申请人，贷款拒绝率为100%,这表明贷款违约历史是贷款审批决定的一个很大的负面因素
+# 而以前没有贷款违约的人明显有更多的批准，这凸显了干净的信用记录与更高的批准率相关，表明以往贷款是否违约是贷款批准的关键因素
 
 # 可视化 数字类特征 vs Loan Status
 numerical_columns_1 = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt',]
 numerical_columns_2 = ['loan_int_rate', 'loan_percent_income', 'cb_person_cred_hist_length', 'credit_score']
 
 fig, axes = plt.subplots(2, 2, figsize=(16, 20))
-fig.suptitle('数字类特征 vs Loan Status (密度图)', fontsize=16)
+fig.suptitle('数值类特征 vs Loan Status (密度图)', fontsize=16)
 for i, col in enumerate(numerical_columns_1):
     # 绘制核密度估计曲线
     sns.kdeplot(data=loan_data, x=col, hue='loan_status', ax=axes[i//2, i % 2], fill=True, common_norm=False, palette='muted')
@@ -221,7 +233,7 @@ plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.show()
 
 fig, axes = plt.subplots(2, 2, figsize=(16, 20))
-fig.suptitle('数字类特征 vs Loan Status (密度图)', fontsize=16)
+fig.suptitle('数值类特征 vs Loan Status (密度图)', fontsize=16)
 for i, col in enumerate(numerical_columns_2):
     # 绘制核密度估计曲线
     sns.kdeplot(data=loan_data, x=col, hue='loan_status', ax=axes[i // 2, i % 2], fill=True, common_norm=False,
@@ -233,7 +245,7 @@ plt.tight_layout(rect=[0, 0, 1, 0.95])
 plt.show()
 
 fig, axes = plt.subplots(len(numerical_columns_1), 1, figsize=(10,20 ))
-fig.suptitle('Loan Status与数字类特征的箱线图', fontsize=16)
+fig.suptitle('Loan Status与数值类特征的箱线图', fontsize=16)
 for i, feature in enumerate(numerical_columns_1):
     sns.boxplot(data=loan_data, x='loan_status', y=feature, ax=axes[i], hue='loan_status', palette='muted', legend=False)
     axes[i].set_title(f'{feature} vs Loan Status')
@@ -244,7 +256,7 @@ plt.tight_layout(rect=[0, 0, 1, 0.97])
 plt.show()
 
 fig, axes = plt.subplots(len(numerical_columns_2), 1, figsize=(10,20 ))
-fig.suptitle('Loan Status与数字类特征的箱线图', fontsize=16)
+fig.suptitle('Loan Status与数值类特征的箱线图', fontsize=16)
 for i, feature in enumerate(numerical_columns_2):
     sns.boxplot(data=loan_data, x='loan_status', y=feature, ax=axes[i], hue='loan_status', palette='muted', legend=False)
     axes[i].set_title(f'{feature} vs Loan Status')
@@ -264,72 +276,7 @@ plt.show()
 # Credit History Length：对于已批准的贷款，具有较长信用记录的人占比较大，这表明具有既定信用记录的申请人获得批准的可能性更高；反映了贷方偏爱具有更多信贷经验的借款人
 # credit score：批准的贷款与更高的信用评分相关，信用更高的人同意贷款的概率更大，这种显著差异凸显了信用评分是贷款批准的有力预测指标，分数越高反映风险越低
 
-# 构建双变量图探查教育水平与贷款状态之间的关系
-plt.figure(figsize=(12, 9))
-ax = sns.countplot(data=loan_data, x='person_education',  hue='loan_status',palette='muted')
-ax.set_xlabel("person_education")
-ax.set_ylabel("Count")
-for p in ax.patches:
-    ax.annotate(f'{int(p.get_height())}',
-            (p.get_x() + p.get_width() / 2., p.get_height()),  ha='center',  va='baseline',
-            fontsize=10, color='black', xytext=(0, 5), textcoords='offset points')
 
-plt.legend(title="Loan Status", loc='upper right', labels=['0=拒绝', '1=接受'], bbox_to_anchor=(1.15, 1))
-plt.tight_layout()
-plt.show()
-# 男性和女性申请人在不同教育阶段的贷款批准率和拒绝率方面表现基本相同，小部分略有不同
-# 只有高中教育的申请人被拒绝的次数似乎多于批准次数，这表明教育水平可能会影响贷款结果
-# 受过更多教育的申请人（例如，拥有硕士和学士学位的申请人）更有可能获得批准，这表明教育水平是贷款批准的积极指标，可能反映了更稳定的财务状况
-# 受教育程度较低的申请人的拒绝率更高，这可能表明贷方认为风险更高，这些模式表明，教育水平是贷款审批决策的一个影响因素，并且在性别间的交互作用相似
-
-
-# 构建双变量图探查住房持有情况与贷款状态之间的关系
-plt.figure(figsize=(12, 9))
-ax = sns.countplot(data=loan_data, x='person_home_ownership',  hue='loan_status',palette='muted')
-ax.set_xlabel("person_home_ownership")
-ax.set_ylabel("Count")
-for p in ax.patches:
-    ax.annotate(f'{int(p.get_height())}',
-            (p.get_x() + p.get_width() / 2., p.get_height()),  ha='center',  va='baseline',
-            fontsize=10, color='black', xytext=(0, 5), textcoords='offset points')
-
-plt.legend(title="Loan Status", loc='upper right', labels=['0=拒绝', '1=接受'], bbox_to_anchor=(1.15, 1))
-plt.tight_layout()
-plt.show()
-# 两种性别的趋势基本相同，但租房基数更高，贷款成功率更高，可能是因为年轻人购买需求大(住房、车)等，还款潜力大
-
-
-# 构建双变量图探查贷款意向与贷款状态之间的关系
-plt.figure(figsize=(12, 9))
-ax = sns.countplot(data=loan_data, x='loan_intent',  hue='loan_status',palette='muted')
-ax.set_xlabel("Loan Intent")
-ax.set_ylabel("Count")
-for p in ax.patches:
-    ax.annotate(f'{int(p.get_height())}',
-            (p.get_x() + p.get_width() / 2., p.get_height()),  ha='center',  va='baseline',
-            fontsize=10, color='black', xytext=(0, 5), textcoords='offset points')
-
-plt.legend(title="Loan Status", loc='upper right', labels=['0=拒绝', '1=接受'], bbox_to_anchor=(1.15, 1))
-plt.tight_layout()
-plt.show()
-# 具图分析，债务合并(debtconsol dation)和医疗意向的同意率更高，相比之下，用于教育、投资和个人贷款的同意率更低
-
-# 构建双变量图探查以往贷款违约与贷款状态之间的关系
-plt.figure(figsize=(12, 9))
-ax = sns.countplot(data=loan_data, x='previous_loan_defaults_on_file',  hue='loan_status',palette='muted')
-ax.set_xlabel("previous loan defaults on file")
-ax.set_ylabel("Count")
-for p in ax.patches:
-    ax.annotate(f'{int(p.get_height())}',
-            (p.get_x() + p.get_width() / 2., p.get_height()),  ha='center',  va='baseline',
-            fontsize=10, color='black', xytext=(0, 5), textcoords='offset points')
-
-plt.legend(title="Loan Status", loc='upper right', labels=['0=拒绝', '1=接受'], bbox_to_anchor=(1.15, 1))
-plt.tight_layout()
-plt.show()
-
-# 以前有过贷款违约史的申请人，贷款拒绝率为100%,这表明贷款违约历史是贷款审批决定的一个很大的负面因素
-# 而以前没有贷款违约的人明显有更多的批准，这凸显了干净的信用记录与更高的批准率相关，表明以往贷款是否违约是贷款批准的关键因素
 
 # 构建双变量图探查以往贷款数额、贷款利率与贷款状态之间的关系
 plt.figure(figsize=(12, 6))
@@ -567,6 +514,7 @@ tune_models = {
 }
 
 best_models = {}
+model_f1_scores = {}  #存储每个模型的f1分数值
 for model_name in tune_models.keys():
     print(f"对 {model_name} 调优")
     # tune_models：需要调优的模型 param_grids：模型对应的超参数搜索空间 n_iter：随机搜索的迭代次数 scoring：以准确率作为模型性能的评估指标
@@ -574,6 +522,7 @@ for model_name in tune_models.keys():
     random_search = RandomizedSearchCV(tune_models[model_name], param_grids[model_name], n_iter=10, scoring='f1', cv=5, random_state=42, n_jobs=-1)
     random_search.fit(X_train_scaled, y_train)
     best_models[model_name] = random_search.best_estimator_  # 选择交叉验证评估后，表现最好的模型存入
+    model_f1_scores[model_name] = random_search.best_score_
     print(f"最优化参数: {random_search.best_params_}")
     print(f"最佳f1分数: {random_search.best_score_}")
 
@@ -594,5 +543,25 @@ for model_name in tune_models.keys():
 
     print("-" * 80)
 
-# 得出结论：以上六个模型的表现都非常良好，都获得了很高的准确率，其中XBoost的模型表现最好，拥有0.845的f1分数，测试集测试拥有93.47%的最高准确率
+# 作图可视化每个模型的F1分数
+models = list(model_f1_scores.keys())
+f1_scores = list(model_f1_scores.values())
 
+# 绘制条形图
+plt.figure(figsize=(10, 6))
+bars = plt.bar(models, f1_scores, color='lightcoral')
+
+# 添加标题和标签
+plt.title('每个模型的 f1 分数比较图 ')
+plt.xlabel('模型')
+plt.ylabel('F1 分数')
+
+# 给每个条状添加F1值标签
+for bar, f1 in zip(bars, f1_scores):
+    plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f'{f1:.5f}', ha='center', va='bottom', fontsize=10)
+
+plt.xticks(rotation=45)
+plt.tight_layout()  # 调整布局避免标签重叠
+plt.show()
+
+# 得出结论：以上六个模型的表现都非常良好，都获得了很高的准确率，其中XBoost的模型表现最好，拥有0.845的f1分数，测试集测试拥有93.47%的最高准确率
