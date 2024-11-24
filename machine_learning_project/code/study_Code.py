@@ -396,15 +396,20 @@ sns.pairplot(loan_data[numerical_columns_with_target + ['loan_status']],
 plt.show()
 # 绘制数据集中的多个数值特征之间的散点图矩阵,pairplot用于可视化多维数据分布和变量之间的关系，特别适合探索数据的潜在模式
 
+
+
 # 对机器学习数据集进行特征选择
 # 数据预处理
 # 将非数值型数据列进行编码：二进制编码(Binary Encoding):适用于二值化类型，映射为0或1
 # 顺序编码(Ordinal Encoding)：将类别值映射为整数值，并保留其顺序特性.较低的数字代表较低的类别，较高的数字代表较高的类别
 # 独热编码(One-Hot Encoding):将类别变量转换为数值变量的编码方式，适用于没有顺序关系的类别数据,每个类别视为独立的特征，并为每个类别创建一个二进制的虚拟变量
+#  二进制编码
 loan_data['person_gender'] = loan_data['person_gender'].map({'female': 0, 'male': 1})
 loan_data['previous_loan_defaults_on_file'] = loan_data['previous_loan_defaults_on_file'].map({'No': 0, 'Yes': 1})
+# 顺序编码
 education_order = {'High School': 1, 'Associate': 2, 'Bachelor': 3, 'Master': 4, 'Doctorate': 5}
 loan_data['person_education'] = loan_data['person_education'].map(education_order)
+# 独热编码
 loan_data = pd.get_dummies(loan_data, columns=['person_home_ownership', 'loan_intent'], drop_first=True)
 # drop_first=True这个参数代表会删除每个类别特征中的第一个类别列，之所以删除第一个类别列，
 # 是为了防止多重共线性。如果不删除第一个类别列，模型可能会因为缺少基准类别（即截距项）而出现不必要的共线性。
@@ -415,7 +420,7 @@ print(loan_data.head())  # 查看编码完成后的情况
 # 绘制相关性热力图，展示数据集中各个特征之间的相关关系，了解哪些特征之间具有较强的正相关或负相关
 # 如果两个特征之间的相关性非常高(大于0.9)，可能会导致多重共线性问题。在这种情况下可以选择删除其中一个特征，减少冗余信息
 # 查看哪些特征与标签有较强的相关性，选择对预测有较大影响的特征(特征选择)。
-corr_matrix = loan_data.corr()
+corr_matrix = loan_data.corr(method='spearman')
 
 plt.figure(figsize=(16, 12))
 sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f', linewidths=0.5)
@@ -468,13 +473,13 @@ with pd.ExcelWriter('../data/train_test_data.xlsx') as writer:
 scaler = StandardScaler()
 X_train_standard = scaler.fit_transform(X_train)
 X_test_standard = scaler.transform(X_test)
-
+# 使用MinMaxScaler来对训练集和测试集的数据进行归一:将每个特征缩放到均值为0和1之间
 minmax_scaler = MinMaxScaler()
 X_train_scaled = minmax_scaler.fit_transform(X_train_standard)
 X_test_scaled = minmax_scaler.transform(X_test_standard)
 
 # 构建模型
-# 选用逻辑回归模型、极端梯度提升模型(XGBoost)、基于梯度提升决策树(CatBoost)、轻量级梯度提升机(LightGBM)、随机森林(Random Forest)
+# 选用逻辑回归模型、极端梯度提升模型(XGBoost)、基于梯度提升决策树(CatBoost)、轻量级梯度提升机(LightGBM)、随机森林(Random Forest)、支持向量机(SVM)
 models = {
     'Logistic Regression': LogisticRegression(random_state=42),
     'Random Forest': RandomForestClassifier(random_state=42),
@@ -491,45 +496,45 @@ for name, model in models.items():
 
 param_grids = {
     'Logistic Regression': {
-        'C': [0.01, 0.1, 1, 10,100],
-        'tol': [1e-1,1e-2,1e-3, 1e-4],
-        'solver': ['lbfgs', 'saga','liblinear'],
-        'max_iter': [200, 500, 1000,3000]
+        'C': [0.01, 0.1, 1, 10, 100],  # 正则化强度，值越小，正则化效果越强
+        'tol': [1e-1, 1e-2, 1e-3, 1e-4],  # 优化过程中的容忍度，收敛的阈值
+        'solver': ['lbfgs', 'saga', 'liblinear'],  # 优化算法选择，接受不同的输入数据类型和规模
+        'max_iter': [200, 500, 1000, 3000]  # 收敛之前的最大迭代次数
     },
     'RandomForest': {
-        'n_estimators': [100, 200, 300],
-        'max_depth': [None, 10, 20],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4]
+        'n_estimators': [100, 200, 300],  # 森林中树的数量，更多的树通常会提高性能
+        'max_depth': [None, 10, 20],  # 单棵树的最大深度，以限制过拟合
+        'min_samples_split': [2, 5, 10],  # 拆分内部节点所需的最小样本数
+        'min_samples_leaf': [1, 2, 4]  # 在叶子节点上所需的最小样本数，防止过拟合
     },
     'LightGBM': {
-        'num_leaves': [20, 30, 40],
-        'max_depth': [4, 6, 8],
-        'learning_rate': [0.01, 0.05, 0.1],
-        'n_estimators': [100, 200, 300],
-        'feature_fraction': [0.6, 0.8, 1.0],
-        'bagging_fraction': [0.6, 0.8, 1.0]
+        'num_leaves': [20, 30, 40],  # 平衡要使用的叶子数，过多的叶子可能导致过拟合
+        'max_depth': [4, 6, 8],  # 树的最大深度，以限制模型复杂度
+        'learning_rate': [0.01, 0.05, 0.1],  # 学习率，控制模型的更新步伐
+        'n_estimators': [100, 200, 300],  # 弱学习器的数量
+        'feature_fraction': [0.6, 0.8, 1.0],  # 每棵树使用的特征比例，防止过拟合
+        'bagging_fraction': [0.6, 0.8, 1.0]  # 每棵树使用的数据比例，用于随机采样
     },
     'CatBoost': {
-        'iterations': [100, 200, 300],
-        'depth': [4, 6, 8],
-        'learning_rate': [0.01, 0.05, 0.1],
-        'l2_leaf_reg': [1, 3, 5]
+        'iterations': [100, 200, 300],  # 迭代次数，构建的树的数量
+        'depth': [4, 6, 8],  # 树的深度，控制复杂度
+        'learning_rate': [0.01, 0.05, 0.1],  # 学习率，影响模型的收敛速度
+        'l2_leaf_reg': [1, 3, 5]  # L2 正则化参数，控制过拟合
     },
     'XGBoost': {
-        'n_estimators': [100, 200, 300],
-        'max_depth': [4, 6, 8],
-        'learning_rate': [0.01, 0.05, 0.1],
-        'colsample_bytree': [0.6, 0.8, 1.0],
-        'subsample': [0.6, 0.8, 1.0]
+        'n_estimators': [100, 200, 300],  # 森林中树的数量，更多的树通常会提高性能
+        'max_depth': [4, 6, 8],  # 树的最大深度，控制模型的复杂度
+        'learning_rate': [0.01, 0.05, 0.1],  # 学习率，控制模型的更新步伐
+        'colsample_bytree': [0.6, 0.8, 1.0],  # 每棵树所使用的特征列子采样比
+        'subsample': [0.6, 0.8, 1.0]  # 每棵树随机采样的训练数据比例，防止过拟合
     },
     'Classification SVM': {
-        'C': [0.01, 0.1, 1, 10, 100],
-        'gamma': ['scale', 'auto', 0.01, 0.1, 0.5],
-        'kernel': ['rbf', 'linear', 'poly'],
-        'degree': [3, 4, 5],
-        'tol': [1e-1,1e-2,1e-3],
-        'max_iter': [5000,10000]
+        'C': [0.01, 0.1, 1, 10, 100],  # 正则化参数，控制分类平面的位置和复杂度
+        'gamma': ['scale', 'auto', 0.01, 0.1, 0.5],  # 核函数的参数，定义支持向量的影响范围
+        'kernel': ['rbf', 'linear', 'poly'],  # 核函数类型，影响决策边界的形式
+        'degree': [3, 4, 5],  # 多项式核的次数，仅适用于 poly 核
+        'tol': [1e-1, 1e-2, 1e-3],  # 优化过程中使用的停止条件
+        'max_iter': [5000, 10000]  # 最大迭代次数，以避免过长训练时间
     }
 }
 
