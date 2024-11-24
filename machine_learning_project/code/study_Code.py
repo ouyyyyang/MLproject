@@ -592,7 +592,7 @@ plt.ylabel('F1 分数')
 
 # 给每个条状添加F1值标签
 for bar, f1 in zip(bars, f1_scores):
-    plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f'{f1:.5f}', ha='center', va='bottom', fontsize=10)
+    plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f'{f1:.5f}', ha='center', va='bottom', fontsize=-1)
 
 plt.xticks(rotation=45)
 plt.tight_layout()  # 调整布局避免标签重叠
