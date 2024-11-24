@@ -582,7 +582,7 @@ models = list(model_f1_scores.keys())
 f1_scores = list(model_f1_scores.values())
 
 # 绘制条形图
-plt.figure(figsize=(10, 6))
+plt.figure(figsize=(12, 8))
 bars = plt.bar(models, f1_scores, color='lightcoral')
 
 # 添加标题和标签
@@ -590,12 +590,14 @@ plt.title('每个模型的 f1 分数比较图 ')
 plt.xlabel('模型')
 plt.ylabel('F1 分数')
 
-# 给每个条状添加F1值标签
+# 给每个条状添加F1值标签,在每个条形上方添加文本，偏移值为条形高度的 1%
 for bar, f1 in zip(bars, f1_scores):
-    plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f'{f1:.5f}', ha='center', va='bottom', fontsize=-1)
+    plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01, f'{f1:.5f}',
+             ha='center', va='bottom', fontsize=12)
 
-plt.xticks(rotation=45)
-plt.tight_layout()  # 调整布局避免标签重叠
+# 调整布局避免标签重叠
+plt.xticks(rotation=45, fontsize=12)
+plt.tight_layout()
 plt.show()
 
 # 得出结论：以上六个模型的表现都非常良好，都获得了很高的准确率，其中XBoost的模型表现最好，拥有最高的f1分数，测试集测试拥有93.47%的最高准确率
