@@ -457,7 +457,7 @@ print(y.head())
 
 # 划分训练集和测试集，指定测试集的大小为20%，训练集大小为80%，设置随机种子，确保每次拆分数据时结果一致
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
+# 通过重采样进行样本平衡
 sm = SMOTE(random_state=42)
 X_train, y_train = sm.fit_resample(X_train, y_train)
 
@@ -598,4 +598,4 @@ plt.xticks(rotation=45)
 plt.tight_layout()  # 调整布局避免标签重叠
 plt.show()
 
-# 得出结论：以上六个模型的表现都非常良好，都获得了很高的准确率，其中XBoost的模型表现最好，拥有0.845的f1分数，测试集测试拥有93.47%的最高准确率
+# 得出结论：以上六个模型的表现都非常良好，都获得了很高的准确率，其中XBoost的模型表现最好，拥有的f1分数，测试集测试拥有93.47%的最高准确率
