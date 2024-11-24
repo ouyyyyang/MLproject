@@ -8,11 +8,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score, classification_report, f1_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.model_selection import RandomizedSearchCV
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
-from sklearn.svm import SVC
-from sklearn.model_selection import RandomizedSearchCV
+from imblearn.over_sampling import SMOTE
+
 # 导入数据
 file_path = '../data/loan_data.csv'
 loan_data = pd.read_csv(file_path)
@@ -58,7 +60,7 @@ plt.legend(['拒绝 (0)', '同意 (1)'])
 plt.tight_layout()  # 自调整子图间距，避免重叠
 plt.show()
 # 上图表明，与已批准的贷款相比，被拒绝的贷款数量更高，这表明在构建预测模型时应解决类别不平衡问题
-# 构建数字列的单变量图进行单变量分析，用univariate_analysis函数实现
+# 构建数值列的单变量图进行单变量分析，用univariate_analysis函数实现
 def univariate_analysis(data, columns):
     plt.figure(figsize=(10, 12))
     for i, column in enumerate(columns, 1):  # 内置函数，用于遍历可迭代对象
@@ -70,8 +72,10 @@ def univariate_analysis(data, columns):
     plt.tight_layout()
     plt.show()
 
+# 数值特征列
 columns_to_analyze = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt', 'loan_int_rate',
                       'loan_percent_income', 'cb_person_cred_hist_length', 'credit_score']
+# 调用画图函数
 univariate_analysis(loan_data, columns_to_analyze)
 
 # Person age:年龄分布略微右偏，数据集中的大多数人年龄在 20 到 40 岁之间
@@ -93,9 +97,7 @@ def univariate_analysis(data, column, title):
     plt.tight_layout()
     plt.show()
 
-# 构建数字列的箱线图进行异常值分析
-columns_to_analyze = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt', 'loan_int_rate',
-                      'loan_percent_income', 'cb_person_cred_hist_length', 'credit_score']
+# 构建数值列的箱线图进行异常值分析
 for column in columns_to_analyze:
     univariate_analysis(loan_data, column, column.replace('_', ' '))
 
@@ -110,15 +112,28 @@ for column in columns_to_analyze:
 
 # 去除年龄异常值,将高于特定阈值（100）的年龄替换为数据集的年龄中位数，以保持真实的分布
 # 将极值替换为中位数有助于消除不切实际的值，而无需删除任何行，从而保持数据集的完整性
-median_age = loan_data['person_age'].median()
-loan_data['person_age'] = loan_data['person_age'].apply(lambda x: median_age if x > 100 else x)
-print('person age的整体状况为：', loan_data['person_age'].describe())
-# 去除工作年龄异常值，以保持真实的分布
-med_age = loan_data['person_emp_exp'].median()
-loan_data['person_emp_exp'] = loan_data['person_emp_exp'].apply(lambda x: med_age if x > 80 else x)
-print('Person Employment Experience的整体状况为：', loan_data['person_emp_exp'].describe())
-
-# 可视化loan_data中非数字列的分布情况，通过条形图和饼状图展现类别型数据的分布特点，获取非数字列的基本信息
+# median_age = loan_data['person_age'].median()
+# loan_data['person_age'] = loan_data['person_age'].apply(lambda x: median_age if x > 80 else x)
+# print('person age的整体状况为：', loan_data['person_age'].describe())
+# # 去除工作年龄异常值，以保持真实的分布
+# med_age = loan_data['person_emp_exp'].median()
+# loan_data['person_emp_exp'] = loan_data['person_emp_exp'].apply(lambda x: med_age if x > 60 else x)
+# print('Person Employment Experience的整体状况为：', loan_data['person_emp_exp'].describe())
+for column in columns_to_analyze:
+    # 计算Q1、Q3和IQR
+    Q1 = loan_data[column].quantile(0.25)
+    Q3 = loan_data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    # 设定异常值的上下限
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    # 计算中位数
+    median = loan_data[column].median()
+    # 替代异常值为中位数
+    loan_data[column] = loan_data[column].where((loan_data[column] >= lower_bound) & (loan_data[column] <= upper_bound), median)
+print("用中位数替代异常值后的数据框：")
+print(loan_data)
+# 可视化loan_data中非数值列的分布情况，通过条形图和饼状图展现类别型数据的分布特点，获取非数值列的基本信息
 def plot_categorical_distribution(column_name, data=loan_data):
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
@@ -146,14 +161,122 @@ plot_categorical_distribution('person_home_ownership')
 plot_categorical_distribution('loan_intent')
 plot_categorical_distribution('previous_loan_defaults_on_file')
 
-# 对于非数字列分布：
+# 对于非数值列分布：
 # Person Gender:在性别方面相对平衡，略微偏向于男性
 # Person Education：大多数申请者拥有高中、学士或硕士学位，拥有副学士学位或博士学位的申请者较少
 # Person Home Ownership:大多数申请人要么租房，要么拥有房屋，少数人拥有抵押贷款或被归类为“其他”；具有不同房屋所有权状况的申请人具有不同的财务稳定性，从而影响借贷风险
 # Loan Intent：贷款用途多种多样，有个人使用、债务合并、医疗费用和教育等，目的不同风险不同，影响贷款审批标准
 # Previous Loan Defaults on File：大多数申请人以前没有贷款违约记录，但仍有不少人违约。该列强烈影响贷款决策，因为过去的违约表明风险更高
 
+#--------------------------------双变量分析-----------------------------------------------------
 
+# 可视化 数值类特征 vs Loan Status
+numerical_columns_1 = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt']
+numerical_columns_2 = ['loan_int_rate', 'loan_percent_income', 'cb_person_cred_hist_length', 'credit_score']
+
+fig, axes = plt.subplots(2, 2, figsize=(16, 20))
+fig.suptitle('数值类特征 vs Loan Status (密度图)', fontsize=16)
+for i, col in enumerate(numerical_columns_1):
+    # 绘制核密度估计曲线
+    sns.kdeplot(data=loan_data, x=col, hue='loan_status', ax=axes[i//2, i % 2], fill=True, common_norm=False, palette='muted')
+    axes[i//2, i%2].set_title(f'{col} vs Loan Status')
+    axes[i//2, i%2].set_ylabel('密度')
+
+plt.tight_layout(rect=[0, 0, 1, 0.95])
+plt.show()
+
+fig, axes = plt.subplots(2, 2, figsize=(16, 20))
+fig.suptitle('数值类特征 vs Loan Status (密度图)', fontsize=16)
+for i, col in enumerate(numerical_columns_2):
+    # 绘制核密度估计曲线
+    sns.kdeplot(data=loan_data, x=col, hue='loan_status', ax=axes[i // 2, i % 2], fill=True, common_norm=False,
+                palette='muted')
+    axes[i // 2, i % 2].set_title(f'{col} vs Loan Status')
+    axes[i // 2, i % 2].set_ylabel('密度')
+
+plt.tight_layout(rect=[0, 0, 1, 0.95])
+plt.show()
+
+fig, axes = plt.subplots(len(numerical_columns_1), 1, figsize=(10,20 ))
+fig.suptitle('Loan Status与数值类特征的箱线图', fontsize=16)
+for i, feature in enumerate(numerical_columns_1):
+    sns.boxplot(data=loan_data, x='loan_status', y=feature, ax=axes[i], hue='loan_status', palette='muted', legend=False)
+    axes[i].set_title(f'{feature} vs Loan Status')
+    axes[i].set_xlabel('Loan Status')
+    axes[i].set_ylabel(feature)
+
+plt.tight_layout(rect=[0, 0, 1, 0.97])
+plt.show()
+
+fig, axes = plt.subplots(len(numerical_columns_2), 1, figsize=(10,20 ))
+fig.suptitle('Loan Status与数值类特征的箱线图', fontsize=16)
+for i, feature in enumerate(numerical_columns_2):
+    sns.boxplot(data=loan_data, x='loan_status', y=feature, ax=axes[i], hue='loan_status', palette='muted', legend=False)
+    axes[i].set_title(f'{feature} vs Loan Status')
+    axes[i].set_xlabel('Loan Status')
+    axes[i].set_ylabel(feature)
+
+plt.tight_layout(rect=[0, 0, 1, 0.97])
+plt.show()
+
+# 对数值类特征与目标之间的相关性分析：
+# person age：获批贷款的年龄中位数略小，但分布差异很小；被拒绝的贷款的分布范围更广，异常值位于上限，可能表明较高的年龄是一个次要风险因素
+# person income：获批贷款通常对应于收入较高的申请人，已批准贷款的收入中位数明显更高，并且已批准的申请存在许多高收入异常值，这表明收入对批准有积极影响
+# Person Employment Experience：对于拒绝和获批贷款的人而言，整体上的密度分布范围基本相同，表明从业经验可能对获批贷款并没有太大的影响
+# Loan Amount：批准和拒绝的贷款金额相对相似，但在被拒绝的贷款中观察到的中位数略低，这可能表明较大的贷款更容易被同意，但差异并不大，并不明显
+# Loan Interest Rate:与被拒绝的贷款相比，批准的贷款的平均利率往往略低
+# Loan Percent Income：贷款获批的申请人的贷款收入比通常较低，这表明占收入比例较小的贷款更有可能获得批准；被拒绝贷款的高贷款收入比表明，当贷款金额占收入的很大一部分时，拒绝的概率更大
+# Credit History Length：对于已批准的贷款，具有较长信用记录的人占比较大，这表明具有既定信用记录的申请人获得批准的可能性更高；反映了贷方偏爱具有更多信贷经验的借款人
+# credit score：批准的贷款与更高的信用评分相关，信用更高的人同意贷款的概率更大，这种显著差异凸显了信用评分是贷款批准的有力预测指标，分数越高反映风险越低
+
+# 构建双变量图探查以往贷款数额、贷款利率与贷款状态之间的关系
+plt.figure(figsize=(12, 6))
+plt.subplot(1, 2, 1)
+sns.violinplot(x='loan_status', y='loan_amnt', data=loan_data)  # 显示数据的集中趋势，又能展示数据的分布形态
+plt.title('Loan Amount 在 Loan Status 中的分布情况')
+plt.subplot(1, 2, 2)
+sns.violinplot(x='loan_status', y='loan_int_rate', data=loan_data)
+plt.title('Loan Interest Rate 在 Loan Status 中的分布情况')
+plt.tight_layout()
+plt.show()
+# 在loan amount中，被拒贷款里数额低的贷款占比更大，而中高数额贷款更容易被同意
+# 在loan Interest Rate中，被拒贷款的利率大多较低，而中高利率的贷款更容易被同意
+
+#各列的特征与目标之间的相关性
+target_col = 'loan_status'
+
+#数值类特征
+numeric_cols = numerical_columns_1 + numerical_columns_2
+
+# 计算点双列相关系数，分析连续变量与目标二分类变量之间的相关性，逐列计算然后将结果放置到集合中，绘制到同一张图上
+# 存储分析结果
+correlation_results = {}
+# 计算相关性和P值
+for col in numeric_cols:
+    correlation, p_value = pointbiserialr(loan_data[col], loan_data[target_col])
+    correlation_results[col] = {
+        '相关性': correlation,
+        'P-值': p_value
+    }
+correlation_df = pd.DataFrame(correlation_results).T
+print(correlation_df)
+
+# 点双列相关系数绘图
+def plot_point_biserial(correlation_df):
+    # 按相关性降序排序
+    correlation_df = correlation_df.sort_values(by='相关性', ascending=False)
+    plt.figure(figsize=(10, 6))
+    # 绘制横向条形图
+    plt.barh(correlation_df.index, correlation_df['相关性'], color='skyblue', edgecolor='black')
+    plt.xlabel('点双列相关系数 (Point Biserial Correlation)', fontsize=12)
+    plt.ylabel('连续变量', fontsize=12)
+    plt.title('连续变量与目标变量的相关性', fontsize=14)
+    plt.grid(axis='x', linestyle='--', alpha=0.7)
+    plt.show()
+# 调用函数
+plot_point_biserial(correlation_df)
+
+# 非数值特征
 # 探索特征与目标之间的相关性
 fig, axes = plt.subplots(2, 3, figsize=(18, 12))
 fig.suptitle("Loan Status与各种分类特征之间的关系", fontsize=18)
@@ -217,103 +340,16 @@ plt.show()
 # 以前有过贷款违约史的申请人，贷款拒绝率为100%,这表明贷款违约历史是贷款审批决定的一个很大的负面因素
 # 而以前没有贷款违约的人明显有更多的批准，这凸显了干净的信用记录与更高的批准率相关，表明以往贷款是否违约是贷款批准的关键因素
 
-# 可视化 数字类特征 vs Loan Status
-numerical_columns_1 = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt',]
-numerical_columns_2 = ['loan_int_rate', 'loan_percent_income', 'cb_person_cred_hist_length', 'credit_score']
-
-fig, axes = plt.subplots(2, 2, figsize=(16, 20))
-fig.suptitle('数值类特征 vs Loan Status (密度图)', fontsize=16)
-for i, col in enumerate(numerical_columns_1):
-    # 绘制核密度估计曲线
-    sns.kdeplot(data=loan_data, x=col, hue='loan_status', ax=axes[i//2, i % 2], fill=True, common_norm=False, palette='muted')
-    axes[i//2, i%2].set_title(f'{col} vs Loan Status')
-    axes[i//2, i%2].set_ylabel('密度')
-
-plt.tight_layout(rect=[0, 0, 1, 0.95])
-plt.show()
-
-fig, axes = plt.subplots(2, 2, figsize=(16, 20))
-fig.suptitle('数值类特征 vs Loan Status (密度图)', fontsize=16)
-for i, col in enumerate(numerical_columns_2):
-    # 绘制核密度估计曲线
-    sns.kdeplot(data=loan_data, x=col, hue='loan_status', ax=axes[i // 2, i % 2], fill=True, common_norm=False,
-                palette='muted')
-    axes[i // 2, i % 2].set_title(f'{col} vs Loan Status')
-    axes[i // 2, i % 2].set_ylabel('密度')
-
-plt.tight_layout(rect=[0, 0, 1, 0.95])
-plt.show()
-
-fig, axes = plt.subplots(len(numerical_columns_1), 1, figsize=(10,20 ))
-fig.suptitle('Loan Status与数值类特征的箱线图', fontsize=16)
-for i, feature in enumerate(numerical_columns_1):
-    sns.boxplot(data=loan_data, x='loan_status', y=feature, ax=axes[i], hue='loan_status', palette='muted', legend=False)
-    axes[i].set_title(f'{feature} vs Loan Status')
-    axes[i].set_xlabel('Loan Status')
-    axes[i].set_ylabel(feature)
-
-plt.tight_layout(rect=[0, 0, 1, 0.97])
-plt.show()
-
-fig, axes = plt.subplots(len(numerical_columns_2), 1, figsize=(10,20 ))
-fig.suptitle('Loan Status与数值类特征的箱线图', fontsize=16)
-for i, feature in enumerate(numerical_columns_2):
-    sns.boxplot(data=loan_data, x='loan_status', y=feature, ax=axes[i], hue='loan_status', palette='muted', legend=False)
-    axes[i].set_title(f'{feature} vs Loan Status')
-    axes[i].set_xlabel('Loan Status')
-    axes[i].set_ylabel(feature)
-
-plt.tight_layout(rect=[0, 0, 1, 0.97])
-plt.show()
-
-# 对数字类特征与目标之间的相关性分析：
-# person age：获批贷款的年龄中位数略小，但分布差异很小；被拒绝的贷款的分布范围更广，异常值位于上限，可能表明较高的年龄是一个次要风险因素
-# person income：获批贷款通常对应于收入较高的申请人，已批准贷款的收入中位数明显更高，并且已批准的申请存在许多高收入异常值，这表明收入对批准有积极影响
-# Person Employment Experience：对于拒绝和获批贷款的人而言，整体上的密度分布范围基本相同，表明从业经验可能对获批贷款并没有太大的影响
-# Loan Amount：批准和拒绝的贷款金额相对相似，但在被拒绝的贷款中观察到的中位数略低，这可能表明较大的贷款更容易被同意，但差异并不大，并不明显
-# Loan Interest Rate:与被拒绝的贷款相比，批准的贷款的平均利率往往略低
-# Loan Percent Income：贷款获批的申请人的贷款收入比通常较低，这表明占收入比例较小的贷款更有可能获得批准；被拒绝贷款的高贷款收入比表明，当贷款金额占收入的很大一部分时，拒绝的概率更大
-# Credit History Length：对于已批准的贷款，具有较长信用记录的人占比较大，这表明具有既定信用记录的申请人获得批准的可能性更高；反映了贷方偏爱具有更多信贷经验的借款人
-# credit score：批准的贷款与更高的信用评分相关，信用更高的人同意贷款的概率更大，这种显著差异凸显了信用评分是贷款批准的有力预测指标，分数越高反映风险越低
-
-
-
-# 构建双变量图探查以往贷款数额、贷款利率与贷款状态之间的关系
-plt.figure(figsize=(12, 6))
-plt.subplot(1, 2, 1)
-sns.violinplot(x='loan_status', y='loan_amnt', data=loan_data)  # 显示数据的集中趋势，又能展示数据的分布形态
-plt.title('Loan Amount 在 Loan Status 中的分布情况')
-plt.subplot(1, 2, 2)
-sns.violinplot(x='loan_status', y='loan_int_rate', data=loan_data)
-plt.title('Loan Interest Rate 在 Loan Status 中的分布情况')
-plt.tight_layout()
-plt.show()
-
-# 在loan amount中，被拒贷款里数额低的贷款占比更大，而中高数额贷款更容易被同意
-# 在loan Interest Rate中，被拒贷款的利率大多较低，而中高利率的贷款更容易被同意
-
-#各列的特征与目标之间的相关性
-target_col = 'loan_status'
-numeric_cols = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt',
-    'loan_int_rate', 'loan_percent_income', 'cb_person_cred_hist_length','credit_score']
-# 计算点双列相关系数，分析连续变量与目标二分类变量之间的相关性，逐列计算然后将结果放置到集合中，绘制到同一张图上
-correlation_results = {}
-for col in numeric_cols:
-    correlation, p_value = pointbiserialr(loan_data[col], loan_data[target_col])
-    correlation_results[col] = {
-        '相关性': correlation,
-        'P-值': p_value
-    }
-correlation_df = pd.DataFrame(correlation_results).T
-print(correlation_df)
-# 定义计算 Cramér's V 的函数
-def cramers_v(chi2, n, k, r):
-    return np.sqrt(chi2 / (n * min(k - 1, r - 1)))
+#卡方检验
 # 分类变量，分析非连续量与目标变量之间的相关性，逐列计算然后将结果放置到集合中，绘制到同一张图上
 categorical_cols = [
     'person_gender', 'previous_loan_defaults_on_file', 'person_education',
     'person_home_ownership', 'loan_intent']
 chi_square_results = {}
+
+# 定义计算 Cramér's V 的函数
+def cramers_v(chi2, n, k, r):
+    return np.sqrt(chi2 / (n * min(k - 1, r - 1)))
 
 for col in categorical_cols:
     # 创建列联表
@@ -335,19 +371,9 @@ for col in categorical_cols:
 chi_square_df = pd.DataFrame(chi_square_results).T
 print(chi_square_df)
 
-# 点双列相关系数绘图
-def plot_point_biserial(correlation_df):
-    correlation_df = correlation_df.sort_values(by='相关性', ascending=False)
-    plt.figure(figsize=(10, 6))
-    plt.barh(correlation_df.index, correlation_df['相关性'], color='skyblue', edgecolor='black')
-    plt.xlabel('点双列相关系数 (Point Biserial Correlation)', fontsize=12)
-    plt.ylabel('连续变量', fontsize=12)
-    plt.title('连续变量与目标变量的相关性', fontsize=14)
-    plt.grid(axis='x', linestyle='--', alpha=0.7)
-    plt.show()
-
 # 卡方检验 (Cramér's V) 绘图
 def plot_cramers_v(chi_square_df):
+    # 按相关性(Cramér's V)排序
     chi_square_df = chi_square_df.sort_values(by='Cramer\'s V', ascending=False)
     plt.figure(figsize=(10, 6))
     plt.barh(chi_square_df.index, chi_square_df['Cramer\'s V'], color='lightgreen', edgecolor='black')
@@ -356,11 +382,10 @@ def plot_cramers_v(chi_square_df):
     plt.title('分类变量与目标变量的相关性 (Cramer\'s V)', fontsize=14)
     plt.grid(axis='x', linestyle='--', alpha=0.7)
     plt.show()
-plot_point_biserial(correlation_df)
+
 plot_cramers_v(chi_square_df)
 
-
-# 2.5.1 绘制 Pairs Plot，展示数字列的状态
+# 2.5.1 绘制 Pairs Plot，展示数值列的状态
 #################################################################################################################
 numerical_columns_with_target = ['person_age', 'person_income', 'person_emp_exp', 'loan_amnt', 'loan_int_rate',
     'loan_percent_income', 'cb_person_cred_hist_length', 'credit_score']
@@ -415,6 +440,9 @@ plt.show()
 # venture（-0.09）和education（-0.06）等贷款意向与审批呈负相关，这可能是因为这些贷款用途具有较高的风险
 # 综上：贷款批准的最强预测因素是贷款百分比收入、贷款利率和过往贷款违约记录这三个特征
 
+# 删除互相关程度高的特征
+loan_data.drop(columns=['person_emp_exp', 'cb_person_cred_hist_length'], inplace=True)
+
 # 3.3 划分训练集和测试集
 # 从数据集中分离特征和目标变量
 X = loan_data.drop(['loan_status'],axis=1)
@@ -424,6 +452,9 @@ print(y.head())
 
 # 划分训练集和测试集，指定测试集的大小为20%，训练集大小为80%，设置随机种子，确保每次拆分数据时结果一致
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+sm = SMOTE(random_state=42)
+X_train, y_train = sm.fit_resample(X_train, y_train)
 
 # 将训练集和测试集存入excel表格中保存
 train_data = pd.concat([X_train, y_train], axis=1)
@@ -442,7 +473,6 @@ minmax_scaler = MinMaxScaler()
 X_train_scaled = minmax_scaler.fit_transform(X_train_standard)
 X_test_scaled = minmax_scaler.transform(X_test_standard)
 
-
 # 构建模型
 # 选用逻辑回归模型、极端梯度提升模型(XGBoost)、基于梯度提升决策树(CatBoost)、轻量级梯度提升机(LightGBM)、随机森林(Random Forest)
 models = {
@@ -458,7 +488,6 @@ models = {
 
 for name, model in models.items():
     model.fit(X_train_scaled, y_train)  # 采用fit方法训练模型，喂数据
-
 
 param_grids = {
     'Logistic Regression': {
